@@ -1,4 +1,3 @@
-# Databricks notebook source
 # news_summary.py
 # ------------------------------------------------------
 # Naver 뉴스 수집 -> 본문추출 -> 프롬프트 주입 -> 요약(JSON)
@@ -270,6 +269,8 @@ def run_news_summary(
             art["fulltext"] = art["fulltext"][:1500]
         articles_with_ids.append(art)
 
+    # 브랜드 행데이터 제공/ 없으면 기본적으로 등록번호, 브랜드명은 줌
+    # 브랜드 행데이터에서 프롬프트를 통해 "공정위_업종분류", "배민_업종분류", "본사_상호명", "브랜드_소개내용_1", "브랜드_장점및노하우"를 보조지표로 이용함
     brand_context_json = json.dumps(brand_context or {
         "공정위_등록번호": brand_no,
         "공정위_영업표지_브랜드명": brand_name,
@@ -283,18 +284,18 @@ def run_news_summary(
 
     # OpenAI 호출
     client = OpenAI(api_key=openai_api_key)
-    resp = client.responses.create(
+    resp = client.chat.completions.create(
         model=openai_model,
-        instructions=NEWS_SUMMARY_SYSTEM_PROMPT,
-        input=user_prompt,
-        reasoning={"effort": "minimal"},
-        text={"verbosity": "low"},
+        messages=[
+            {"role": "system", "content": NEWS_SUMMARY_SYSTEM_PROMPT + "\n\n추론은 최소한으로 수행하면서 효율적으로 하세요. 응답은 간결하게 작성하세요."},
+            {"role": "user", "content": user_prompt},
+        ],
         response_format={"type": "json_object"},
-        max_output_tokens=max_output_tokens,
+        max_completion_tokens=max_output_tokens,
     )
 
-    # 파싱
-    raw_output = (getattr(resp, "output_text", "") or "").strip()
+    raw_output = (resp.choices[0].message.content or "").strip()
+
     if not raw_output:
         raise RuntimeError("뉴스 요약 응답이 비어 있습니다.")
     try:
@@ -304,4 +305,3 @@ def run_news_summary(
 
 
     return result
-

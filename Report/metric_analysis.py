@@ -1,4 +1,3 @@
-# Databricks notebook source
 # metric_analysis.py
 # ------------------------------------------------------
 # 입력: (sido, sigungu, industry, budget_excl_rent, needs, brand_no, brand_name)
@@ -109,6 +108,7 @@ def run_metric_analysis(
     needs: str,
     brand_no: str,
     brand_name: str,
+    brand_context: Optional[Dict[str, Any]] = None,\
     openai_api_key: Optional[str] = None,
     model: str = MODEL,
 ) -> Dict[str, Any]:
@@ -123,7 +123,7 @@ def run_metric_analysis(
         raise RuntimeError("OpenAI API 키가 필요합니다.")
     client = OpenAI(api_key=openai_api_key)
 
-    # 업종 요약 로드(선택)
+    # 업종 요약 로드
     try:
         industry_summary_df = spark.table(INDUSTRY_SUMMARY_TABLE)
         industry_rows = (
@@ -137,12 +137,16 @@ def run_metric_analysis(
         industry_context_json = "{}"
 
     # 컨텍스트
-    context_json = json.dumps({
-        "공정위_등록번호": brand_no,
-        "공정위_영업표지_브랜드명": brand_name,
-        "시도": sido,
-        "시군구": sigungu,
-    }, ensure_ascii=False)
+    if brand_context:
+        context_json = json.dumps(_row_to_context_dict(brand_context), ensure_ascii=False)
+    else:    # 비어있는 경우 최소 정보를 줌
+        context_json = json.dumps({
+            "공정위_등록번호": brand_no,
+            "공정위_영업표지_브랜드명": brand_name,
+            "시도": sido,
+            "시군구": sigungu,
+        }, ensure_ascii=False)
+
 
     # 프롬프트 주입
     user_prompt = USER_PROMPT.format(
@@ -157,16 +161,17 @@ def run_metric_analysis(
     )
 
     # OpenAI 호출
-    resp = client.responses.create(
+    resp = client.chat.completions.create(
         model=model,
-        instructions=SYSTEM_PROMPT,
-        input=user_prompt,
-        reasoning={"effort": "minimal"},
-        text={"verbosity": "medium"},
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT + "\n\n추론은 최소한으로 수행하면서 효율적으로 하세요. 응답은 간결하게 작성하세요."},
+            {"role": "user", "content": user_prompt},
+        ],
         response_format={"type": "json_object"},
-        max_output_tokens=8000,
+        max_completion_tokens=8000,
     )
-    raw_text = (getattr(resp, "output_text", "") or "").strip()
+
+    raw_text = (resp.choices[0].message.content or "").strip()
     if not raw_text:
         raise RuntimeError("모델 응답이 비어 있습니다.")
 
@@ -191,4 +196,3 @@ def run_metric_analysis(
         "지표분석_JSON": filtered,
         "모델원본응답": raw_text,
     }
-
