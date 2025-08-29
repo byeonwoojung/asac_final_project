@@ -1,5 +1,4 @@
-# Databricks notebook source
-# run_pipeline.py
+# run_report.py
 from __future__ import annotations
 
 from typing import List, Dict, Any
@@ -93,6 +92,7 @@ def run_pipeline() -> List[Dict[str, Any]]:
                     needs=user_input["needs"],
                     brand_no=brand_no,
                     brand_name=brand_name,
+                    brand_context=brand_row,
                 )
             )
 
@@ -141,4 +141,3 @@ def run_pipeline() -> List[Dict[str, Any]]:
 if __name__ == "__main__":
     out = run_pipeline()
     print(json.dumps(out, ensure_ascii=False, indent=2))
-
